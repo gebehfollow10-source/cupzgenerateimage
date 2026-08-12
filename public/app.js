@@ -1,128 +1,30 @@
-const $ = s => document.querySelector(s);
-const promptEl = $("#prompt");
-const canvas = $("#canvas");
-const generateBtn = $("#generateBtn");
-const downloadBtn = $("#downloadBtn");
-const promptUsed = $("#promptUsed");
-let currentImage = null;
-let allModels = [];
+const $=id=>document.getElementById(id);
+const promptEl=$("prompt"),modelEl=$("model"),ratioEl=$("ratio"),negativeEl=$("negative"),btn=$("generate"),canvas=$("canvas"),meta=$("meta"),error=$("error"),download=$("download"),historyEl=$("history"),status=$("status");
+let current=null,history=JSON.parse(sessionStorage.getItem("cupz_history")||"[]");
 
-async function loadModels() {
-  const select = $("#model");
-  try {
-    const r = await fetch("/api/models");
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || "Gagal mengambil model");
-
-    allModels = data.models || [];
-    select.innerHTML = "";
-
-    const imageModels = allModels.filter(m => {
-      const actions = (m.actions || []).map(a => String(a).toLowerCase());
-      const imageName = /image|imagen|nano.?banana/i.test(m.id + " " + m.name);
-      return imageName && (actions.length === 0 || actions.includes("generatecontent"));
-    });
-    const preferred = imageModels.length ? imageModels : allModels;
-
-    preferred.forEach(m => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.name + " — " + m.id;
-      select.appendChild(opt);
-    });
-
-    const defaultId = "gemini-3.1-flash-image";
-    if ([...select.options].some(o => o.value === defaultId)) {
-      select.value = defaultId;
-    }
-  } catch (e) {
-    select.innerHTML = '<option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image</option>';
-  }
+function renderHistory(){
+  if(!history.length){historyEl.innerHTML='<div class="historyEmpty">Belum ada hasil di sesi ini.</div>';return}
+  historyEl.innerHTML=history.map((x,i)=>`<button class="historyItem" data-i="${i}"><img src="${x.src}" alt="Generated image"></button>`).join("");
+  historyEl.querySelectorAll(".historyItem").forEach(b=>b.onclick=()=>show(history[+b.dataset.i].src,history[+b.dataset.i].model,history[+b.dataset.i].ratio));
 }
-
-loadModels();
-
-const inspirations = [
-  "A cinematic night market in Yogyakarta, Indonesia, after rain, warm lanterns, reflections on wet streets, realistic photography",
-  "A futuristic Indonesian city floating above the ocean at sunset, elegant architecture, volumetric light, epic cinematic concept art",
-  "A cute orange cat astronaut exploring a colorful alien planet, whimsical 3D illustration, expressive face, detailed environment",
-  "Luxury perfume bottle on black marble with dramatic studio lighting, premium editorial product photography"
-];
-
-document.querySelectorAll(".quick button").forEach(btn => {
-  btn.onclick = () => { promptEl.value = btn.dataset.prompt; promptEl.focus(); };
-});
-
-$("#randomBtn").onclick = () => {
-  promptEl.value = inspirations[Math.floor(Math.random() * inspirations.length)];
-  promptEl.focus();
-};
-
-async function generate() {
-  const prompt = promptEl.value.trim();
-  if (prompt.length < 3) return promptEl.focus();
-
-  generateBtn.disabled = true;
-  generateBtn.innerHTML = "<span>◌ Gemini sedang membuat gambar…</span>";
-  downloadBtn.disabled = true;
-  promptUsed.textContent = "";
-  canvas.innerHTML = '<div class="loading"><div class="loader"></div><div>Gemini sedang menyempurnakan prompt & membuat gambar…</div></div>';
-
-  try {
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({
-        prompt,
-        enhance: $("#enhance").checked,
-        aspectRatio: $("#aspectRatio").value,
-        model: $("#model").value
-      })
-    });
-
-    const raw = await response.text();
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      throw new Error(
-        `Server mengembalikan response bukan JSON (HTTP ${response.status}). ` +
-        `Jika deploy di Vercel, pastikan folder api/ ikut ter-upload dan GEMINI_API_KEY sudah di Environment Variables.`
-      );
-    }
-    if (!response.ok) throw new Error(data.error || "Generation failed");
-
-    currentImage = data.image;
-    canvas.innerHTML = "";
-    const img = document.createElement("img");
-    img.src = currentImage;
-    img.alt = prompt;
-    canvas.appendChild(img);
-    promptUsed.textContent = "Prompt final Gemini: " + data.prompt;
-    downloadBtn.disabled = false;
-  } catch (err) {
-    canvas.innerHTML = `<div class="empty"><div class="spark">!</div><h3>Generation failed</h3><p>${escapeHtml(err.message)}</p></div>`;
-  } finally {
-    generateBtn.disabled = false;
-    generateBtn.innerHTML = "<span>✦ Generate with Gemini</span><kbd>Ctrl ↵</kbd>";
-  }
+function show(src,model="",ratio=""){
+  current=src;canvas.classList.remove("loading");canvas.innerHTML=`<img src="${src}" alt="CupzProject generated image">`;meta.textContent=`${model}${ratio?" • "+ratio:""}`;download.disabled=false;
 }
-
-downloadBtn.onclick = () => {
-  if (!currentImage) return;
-  const a = document.createElement("a");
-  a.href = currentImage;
-  a.download = `cupzproject-gemini-${Date.now()}.png`;
-  document.body.appendChild(a); a.click(); a.remove();
-};
-
-generateBtn.onclick = generate;
-promptEl.onkeydown = e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") generate();
-};
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-  }[c]));
+async function check(){
+  try{const r=await fetch("/api/status"),d=await r.json();status.className=d.configured?"status ok":"status bad";status.innerHTML=d.configured?"<i></i> Gemini connected":"<i></i> API key not configured"}catch{status.className="status bad";status.innerHTML="<i></i> Server offline"}
 }
+async function generate(){
+  if(!promptEl.value.trim()){error.hidden=false;error.textContent="Tulis prompt terlebih dahulu.";return}
+  error.hidden=true;btn.disabled=true;btn.textContent="Generating...";canvas.classList.add("loading");canvas.innerHTML="";meta.textContent="Gemini sedang membuat gambar...";
+  try{
+    const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:promptEl.value,model:modelEl.value,aspectRatio:ratioEl.value,negativePrompt:negativeEl.value})});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"Generation failed");
+    const src=`data:${d.image.mimeType};base64,${d.image.data}`;show(src,d.modelName,d.aspectRatio);
+    history.unshift({src,model:d.modelName,ratio:d.aspectRatio,prompt:promptEl.value});history=history.slice(0,10);sessionStorage.setItem("cupz_history",JSON.stringify(history));renderHistory();
+  }catch(e){canvas.classList.remove("loading");canvas.innerHTML='<div class="empty"><div class="emptyIcon">!</div><h3>Generation failed</h3><p>Periksa API key, model, quota, dan koneksi.</p></div>';error.hidden=false;error.textContent=e.message;meta.textContent="Gagal membuat gambar."}
+  finally{btn.disabled=false;btn.textContent="✦  Generate image"}
+}
+btn.onclick=generate;promptEl.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")generate()};
+download.onclick=()=>{if(!current)return;const a=document.createElement("a");a.href=current;a.download=`cupzproject-${Date.now()}.png`;a.click()};
+$("clear").onclick=()=>{history=[];sessionStorage.removeItem("cupz_history");renderHistory()};
+renderHistory();check();
