@@ -1,12 +1,11 @@
 {
-  "name": "cupzproject-gemini-ai-image-generator",
-  "version": "1.1.0",
+  "name": "cupzproject-gemini-vercel",
+  "version": "2.0.0",
   "private": true,
-  "type": "module",
-  "scripts": {"start": "node server.js", "dev": "node --watch server.js"},
-  "dependencies": {
-    "@google/genai": "^1.8.0",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0"
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
