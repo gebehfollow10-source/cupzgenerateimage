@@ -17,10 +17,11 @@ async function loadModels() {
     allModels = data.models || [];
     select.innerHTML = "";
 
-    const imageModels = allModels.filter(m =>
-      m.actions.some(a => String(a).toLowerCase().includes("generatecontent")) &&
-      /image|imagen|nano.?banana/i.test(m.id + " " + m.name)
-    );
+    const imageModels = allModels.filter(m => {
+      const actions = (m.actions || []).map(a => String(a).toLowerCase());
+      const imageName = /image|imagen|nano.?banana/i.test(m.id + " " + m.name);
+      return imageName && (actions.length === 0 || actions.includes("generatecontent"));
+    });
     const preferred = imageModels.length ? imageModels : allModels;
 
     preferred.forEach(m => {
@@ -79,7 +80,16 @@ async function generate() {
       })
     });
 
-    const data = await response.json();
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(
+        `Server mengembalikan response bukan JSON (HTTP ${response.status}). ` +
+        `Jika deploy di Vercel, pastikan folder api/ ikut ter-upload dan GEMINI_API_KEY sudah di Environment Variables.`
+      );
+    }
     if (!response.ok) throw new Error(data.error || "Generation failed");
 
     currentImage = data.image;
