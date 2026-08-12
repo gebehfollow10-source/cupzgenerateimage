@@ -1,115 +1,93 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+import { GoogleGenAI } from "@google/genai";
+
+const MODELS = {
+  "gemini-3.1-flash-lite-image": "Nano Banana 2 Lite",
+  "gemini-3.1-flash-image": "Nano Banana 2",
+  "gemini-3-pro-image": "Nano Banana Pro",
+  "gemini-2.5-flash-image": "Nano Banana"
+};
+
+export default async function handler(request, response) {
+  response.setHeader("Cache-Control", "no-store");
+
+  if (request.method !== "POST") {
+    return response.status(405).json({ error: "Method not allowed." });
   }
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return res.status(500).json({ error: "GEMINI_API_KEY belum diatur di Vercel." });
+  if (!process.env.GEMINI_API_KEY) {
+    return response.status(500).json({
+      error: "GEMINI_API_KEY belum diatur di Vercel Environment Variables."
+    });
+  }
 
   try {
-    const body = req.body || {};
-    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-    const enhance = body.enhance !== false;
-    const aspectRatio = body.aspectRatio || "1:1";
-    const model = body.model || process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
-    const textModel = process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash";
+    const {
+      prompt,
+      model = "gemini-3.1-flash-image",
+      aspectRatio = "1:1",
+      negativePrompt = ""
+    } = request.body || {};
 
-    if (prompt.length < 3) return res.status(400).json({ error: "Masukkan prompt minimal 3 karakter." });
-
-    let finalPrompt = prompt;
-
-    if (enhance) {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(textModel)}:generateContent?key=${encodeURIComponent(key)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text:
-                  "Rewrite the user's image request into one polished production-ready image prompt. " +
-                  "Preserve intent. Add useful subject, composition, lighting, environment, camera/style " +
-                  "details when helpful. Return only the final prompt.\\n\\nUSER REQUEST:\\n" + prompt
-              }]
-            }]
-          })
-        }
-      );
-      const raw = await r.text();
-      let d;
-      try { d = JSON.parse(raw); } catch { throw new Error(`Gemini text endpoint returned invalid data (HTTP ${r.status}).`); }
-      if (!r.ok) throw new Error(d?.error?.message || `Gemini text error (HTTP ${r.status}).`);
-      const improved = d?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
-      if (improved) finalPrompt = improved;
+    if (!prompt || !String(prompt).trim()) {
+      return response.status(400).json({ error: "Prompt tidak boleh kosong." });
     }
 
-    // Current Gemini image-generation endpoint.
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": key,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        input: finalPrompt,
-        response_format: {
-          type: "image",
-          mime_type: "image/png",
-          aspect_ratio: aspectRatio,
-          image_size: "1K"
-        }
-      })
+    if (!MODELS[model]) {
+      return response.status(400).json({ error: "Model gambar tidak dikenal." });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    const finalPrompt = [
+      `Create a high-quality image based on this user prompt: ${String(prompt).trim()}`,
+      `Desired aspect ratio: ${aspectRatio}.`,
+      negativePrompt && String(negativePrompt).trim()
+        ? `Avoid these elements/styles: ${String(negativePrompt).trim()}.`
+        : "",
+      "Return an image suitable for a modern AI image generator UI."
+    ].filter(Boolean).join("\n");
+
+    const result = await ai.models.generateContent({
+      model,
+      contents: finalPrompt,
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: { aspectRatio }
+      }
     });
 
-    const raw = await r.text();
-    let d;
-    try { d = JSON.parse(raw); } catch {
-      throw new Error(`Gemini image endpoint returned invalid data (HTTP ${r.status}).`);
-    }
-    if (!r.ok) throw new Error(d?.error?.message || `Gemini image error (HTTP ${r.status}).`);
+    let image = null;
+    let text = "";
 
-    let imageData = null;
-    let mime = "image/png";
-
-    for (const step of d.output || []) {
-      if (step.type !== "model_output") continue;
-      for (const block of step.content || []) {
-        if (block.type === "image" && block.data) {
-          imageData = block.data;
-          mime = block.mime_type || mime;
-          break;
-        }
-      }
-      if (imageData) break;
-    }
-
-    // Compatibility fallback for SDK/gateway response shapes.
-    if (!imageData) {
-      for (const step of d.steps || []) {
-        if (step.type !== "model_output") continue;
-        for (const block of step.content || []) {
-          if (block.type === "image" && block.data) {
-            imageData = block.data;
-            mime = block.mime_type || mime;
-            break;
-          }
-        }
-        if (imageData) break;
+    for (const part of result.candidates?.[0]?.content?.parts || []) {
+      if (part.text) text += part.text;
+      if (part.inlineData?.data) {
+        image = {
+          mimeType: part.inlineData.mimeType || "image/png",
+          data: part.inlineData.data
+        };
       }
     }
 
-    if (!imageData) throw new Error("Gemini tidak mengembalikan gambar. Pastikan model yang dipilih mendukung image generation.");
+    if (!image) {
+      return response.status(502).json({
+        error: "Gemini tidak mengembalikan gambar. Coba prompt/model lain.",
+        text
+      });
+    }
 
-    return res.status(200).json({
+    return response.status(200).json({
       ok: true,
-      image: `data:${mime};base64,${imageData}`,
-      prompt: finalPrompt,
-      model
+      model,
+      modelName: MODELS[model],
+      aspectRatio,
+      image,
+      text
     });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: e.message || "Terjadi kesalahan Gemini API." });
+  } catch (error) {
+    console.error(error);
+    return response.status(500).json({
+      error: error?.message || "Terjadi kesalahan saat menghubungi Gemini API."
+    });
   }
 }
