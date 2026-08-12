@@ -1,1 +1,81 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08090d">
+  <title>CupzProject Image Generator</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="bg-orb orb-a"></div><div class="bg-orb orb-b"></div>
 
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div><strong>CupzProject</strong><span> AI Image Studio</span></div>
+  </div>
+  <div class="status"><i></i> </div>
+</header>
+
+<main class="shell">
+  <section class="hero">
+    <div class="eyebrow"></div>
+    <p>Masukkan teks, biarkan Web menyempurnakan prompt, lalu Web membuat gambar AI untukmu.</p>
+  </section>
+
+  <section class="studio">
+    <div class="panel controls">
+      <div class="panel-title">
+        <div><span class="mini-label">PROMPT</span><h2>Describe your image</h2></div>
+        <button class="ghost" id="randomBtn">↗ Inspire me</button>
+      </div>
+
+      <textarea id="prompt" placeholder="Contoh: Kota futuristik di Jakarta saat hujan malam, neon cyberpunk, cinematic, sangat detail..."></textarea>
+
+      <div class="quick">
+        <button data-prompt="A cinematic portrait of a futuristic Indonesian explorer in a neon city, dramatic lighting, ultra detailed">Portrait</button>
+        <button data-prompt="A cozy modern cabin in a tropical forest after rain, warm interior light, cinematic photography">Landscape</button>
+        <button data-prompt="A premium futuristic sneaker product advertisement, studio lighting, clean composition">Product</button>
+        <button data-prompt="A magical floating island above the clouds at sunrise, fantasy concept art, epic scale">Fantasy</button>
+      </div>
+
+      <label class="field">Model AI API
+        <select id="model"><option value="">Loading all AI models…</option></select>
+        <small class="model-note">Daftar diambil langsung dari Web API berdasarkan Web API .</small>
+      </label>
+
+      <label class="field">Aspect ratio
+        <select id="aspectRatio">
+          <option value="1:1">Square · 1:1</option>
+          <option value="16:9">Landscape · 16:9</option>
+          <option value="9:16">Portrait · 9:16</option>
+          <option value="4:3">Classic · 4:3</option>
+          <option value="3:4">Portrait · 3:4</option>
+        </select>
+      </label>
+
+      <label class="switch-row">
+        <span><b>Enhance prompt </b><small>Gemini memperjelas komposisi, lighting, style, dan detail.</small></span>
+        <input type="checkbox" id="enhance" checked><span class="switch"></span>
+      </label>
+
+      <button class="generate" id="generateBtn"><span> Generate </span><kbd></kbd></button>
+    </div>
+
+    <div class="panel preview">
+      <div class="preview-head">
+        <div><span class="mini-label">CANVAS</span><h2>Your creation</h2></div>
+        <button class="download ghost" id="downloadBtn" disabled>↓ Download</button>
+      </div>
+      <div class="canvas" id="canvas">
+        <div class="empty"><div class="spark">✦</div><h3>Your image will appear here</h3><p>Tulis prompt di sebelah kiri lalu tekan Generate.</p></div>
+      </div>
+      <div class="prompt-used" id="promptUsed"></div>
+    </div>
+  </section>
+</main>
+<footer>© 2026 CupzProject </footer>
+<script src="/app.js"></script>
+</body>
+</html>
